@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 import { App, Modal, Notice, Plugin, TFile, PluginSettingTab, Setting, Editor, requestUrl, addIcon } from 'obsidian';
 import * as OCL from 'openchemlib';
 

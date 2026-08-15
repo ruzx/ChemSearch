@@ -1,9 +1,9 @@
 {
-    "id": "chem-search",
+    "id": "chemsearch",
     "name": "ChemSearch",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minAppVersion": "1.0.0",
-    "description": "Perform chemical substructure searches across your Obsidian vault.",
+    "description": "Chemical substructure search plugin",
     "author": "Ruzal Sitdikov",
     "isDesktopOnly": false
 }
