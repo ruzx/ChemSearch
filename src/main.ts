@@ -324,15 +324,15 @@ export default class ChemSearchPlugin extends Plugin {
             
             if (file.name.toLowerCase().includes(lowerQuery)) matched = true;
             
-            const fm = cache?.frontmatter as Record<string, unknown> | undefined;
+            const fm = cache?.frontmatter;
             if (fm) {
-                const name = fm['name'];
+                const name: unknown = fm['name'];
                 if (typeof name === 'string' && name.toLowerCase().includes(lowerQuery)) matched = true;
                 
-                const cas = fm['cas'];
+                const cas: unknown = fm['cas'];
                 if (typeof cas === 'string' && cas.toLowerCase().includes(lowerQuery)) matched = true;
                 
-                const barcode = fm['barcode'];
+                const barcode: unknown = fm['barcode'];
                 if (typeof barcode === 'string' && barcode.toLowerCase().includes(lowerQuery)) matched = true;
             }
             
@@ -496,9 +496,9 @@ class InventoryModal extends Modal {
         
         for (const file of files) {
             const cache = this.app.metadataCache.getFileCache(file);
-            const fm = cache?.frontmatter as Record<string, unknown> | undefined;
+            const fm = cache?.frontmatter;
             if (fm && key in fm) {
-                const val = fm[key];
+                const val: unknown = fm[key];
                 if (typeof val === 'string' && val.trim() !== '') {
                     values.add(val.trim());
                 }
@@ -566,14 +566,15 @@ class InventoryModal extends Modal {
         try {
             const pubchemRes = await requestUrl(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(name)}/property/CanonicalSMILES/JSON`);
             if (pubchemRes.status === 200) {
-                interface PubChemProps { CanonicalSMILES?: string; CID?: number; }
-                interface PubChemResponse { PropertyTable?: { Properties?: PubChemProps[] } }
+                const data = pubchemRes.json as Record<string, unknown>;
+                const pTable = data?.PropertyTable as Record<string, unknown> | undefined;
+                const pArr = pTable?.Properties as Array<Record<string, unknown>> | undefined;
+                const props = pArr?.[0];
                 
-                const data = pubchemRes.json as unknown as PubChemResponse;
-                const props = data?.PropertyTable?.Properties?.[0];
-                
-                if (props?.CanonicalSMILES) this.smilesInput.value = props.CanonicalSMILES;
-                if (props?.CID) this.pubchemCid = props.CID.toString();
+                if (props) {
+                    if (typeof props.CanonicalSMILES === 'string') this.smilesInput.value = props.CanonicalSMILES;
+                    if (typeof props.CID === 'number') this.pubchemCid = props.CID.toString();
+                }
             }
         } catch {
             // Silent fallback
@@ -709,7 +710,7 @@ class SearchResultsModal extends Modal {
 
         if (this.chemEdit && this.chemEdit.api) {
             const queryPreview = await this.chemEdit.api.renderStructure(this.querySmiles, 150, 150);
-            if (queryPreview) queryContainer.appendChild(queryPreview);
+            if (queryPreview) queryContainer.insertAdjacentElement('beforeend', queryPreview);
         } else {
             queryContainer.createEl("code", { text: this.querySmiles, cls: "color-text-normal" });
         }
@@ -738,7 +739,7 @@ class SearchResultsModal extends Modal {
 
             if (this.chemEdit && this.chemEdit.api && targetSmiles) {
                 const resultPreview = await this.chemEdit.api.renderStructure(targetSmiles, 80, 80);
-                if (resultPreview) s.controlEl.appendChild(resultPreview);
+                if (resultPreview) s.controlEl.insertAdjacentElement('beforeend', resultPreview);
             }
         }
     }
@@ -773,7 +774,7 @@ class ElectrolysisModal extends Modal {
             .addButton(btn => {
                 btn.setButtonText("Insert into Note");
                 insertBtnCtrl = btn.buttonEl;
-                insertBtnCtrl.addClass("is-hidden"); // Uses Obsidian's native hidden class
+                insertBtnCtrl.addClass("is-hidden"); 
                 btn.onClick(() => {
                     if (this.editor) {
                         const cursor = this.editor.getCursor();
@@ -1032,7 +1033,7 @@ class ChemSearchSettingTab extends PluginSettingTab {
     }
 
     getSettingDefinitions() {
-        return [];
+        return {};
     }
 
     display(): void {
