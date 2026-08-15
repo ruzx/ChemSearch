@@ -1,4 +1,3 @@
-/* eslint-disable obsidianmd/no-static-styles-assignment */
 import { App, Modal, Notice, Plugin, TFile, PluginSettingTab, Setting, Editor, requestUrl, addIcon } from 'obsidian';
 import * as OCL from 'openchemlib';
 
@@ -232,7 +231,8 @@ export default class ChemSearchPlugin extends Plugin {
         
         const isChemEditPlugin = (plug: unknown): plug is ChemEditPluginInstance => {
             if (typeof plug === 'object' && plug !== null) {
-                const api = (plug as Record<string, unknown>).api;
+                const plugObj = plug as Record<string, unknown>;
+                const api = plugObj.api;
                 return typeof api === 'object' && api !== null && typeof (api as Record<string, unknown>).openEditor === 'function';
             }
             return false;
@@ -321,9 +321,11 @@ export default class ChemSearchPlugin extends Plugin {
         for (const file of files) {
             const cache = this.app.metadataCache.getFileCache(file);
             let matched = false;
+            
             if (file.name.toLowerCase().includes(lowerQuery)) matched = true;
-            if (cache?.frontmatter) {
-                const fm = cache.frontmatter;
+            
+            const fm = cache?.frontmatter as Record<string, unknown> | undefined;
+            if (fm) {
                 const name = fm['name'];
                 if (typeof name === 'string' && name.toLowerCase().includes(lowerQuery)) matched = true;
                 
@@ -333,6 +335,7 @@ export default class ChemSearchPlugin extends Plugin {
                 const barcode = fm['barcode'];
                 if (typeof barcode === 'string' && barcode.toLowerCase().includes(lowerQuery)) matched = true;
             }
+            
             if (matched) matchingFiles.push(file);
         }
         
@@ -374,64 +377,54 @@ class MasterSearchModal extends Modal {
 
     onOpen() {
         const { contentEl } = this;
-        contentEl.createEl("h3", { text: "Search for a Container / Compound" });
-        
-        const subtitle = contentEl.createEl("p", { text: "Search metadata (Name, Synonym, CAS, Barcode) or draw a substructure.", cls: "color-text-muted" });
-        subtitle.style.fontSize = "0.9em";
-        subtitle.style.marginBottom = "15px";
+        contentEl.createEl("h3", { text: "Search Container / Compound" });
+        contentEl.createEl("p", { text: "Search metadata (Name, Synonym, CAS, Barcode) or draw a substructure.", cls: "setting-item-description" });
 
-        const container = contentEl.createDiv();
-        container.style.background = "var(--background-secondary)";
-        container.style.padding = "20px";
-        container.style.borderRadius = "8px";
+        let query = "";
+        let searchBtnCtrl: HTMLButtonElement | undefined;
 
-        const label = container.createEl("label", { text: "Name, CAS Number, or Barcode:", cls: "color-text-normal" });
-        label.style.display = "block";
-        
-        this.searchInput = container.createEl("input", { type: "text", placeholder: "e.g., Toluene, 108-88-3, or BC-1004" });
-        this.searchInput.style.width = "100%";
-        this.searchInput.style.marginBottom = "20px";
-        this.searchInput.style.marginTop = "5px";
-
-        const btnGrid = container.createDiv();
-        btnGrid.style.display = "flex";
-        btnGrid.style.gap = "10px";
-        btnGrid.style.justifyContent = "space-between";
-        btnGrid.style.alignItems = "center";
-
-        const structureBtn = btnGrid.createEl("button", { text: "Structure Search ▾" });
-        structureBtn.onclick = () => {
-            const chemEdit = this.plugin.getChemEdit();
-            if (!chemEdit) {
-                new Notice("A Structure Drawing plugin is required for this feature.");
-                return;
-            }
-            this.close();
-            chemEdit.api.openEditor("", "smiles", async (querySmiles: string) => {
-                await this.plugin.executeStructureSearchSafe(querySmiles, chemEdit);
+        new Setting(contentEl)
+            .setName("Name, CAS Number, or Barcode:")
+            .addText(text => {
+                text.setPlaceholder("e.g., Toluene, 108-88-3");
+                text.onChange(val => query = val);
+                text.inputEl.addEventListener("keypress", (e) => {
+                    if (e.key === "Enter" && searchBtnCtrl) searchBtnCtrl.click();
+                });
+                window.setTimeout(() => text.inputEl.focus(), 50);
             });
-        };
 
-        const metaSearchBtn = btnGrid.createEl("button", { text: "Search Inventory", cls: "mod-cta" });
-        metaSearchBtn.onclick = () => {
-            const query = this.searchInput.value.trim();
-            if (query) {
-                void this.plugin.performMetadataSearch(query);
-                this.close();
-            } else {
-                new Notice("Enter a search term.");
-            }
-        };
+        new Setting(contentEl)
+            .addButton(btn => {
+                btn.setButtonText("Structure Search ▾");
+                btn.onClick(() => {
+                    const chemEdit = this.plugin.getChemEdit();
+                    if (!chemEdit) {
+                        new Notice("A Structure Drawing plugin is required for this feature.");
+                        return;
+                    }
+                    this.close();
+                    chemEdit.api.openEditor("", "smiles", async (querySmiles: string) => {
+                        await this.plugin.executeStructureSearchSafe(querySmiles, chemEdit);
+                    });
+                });
+            })
+            .addButton(btn => {
+                btn.setButtonText("Search Inventory");
+                btn.setCta();
+                searchBtnCtrl = btn.buttonEl;
+                btn.onClick(() => {
+                    const q = query.trim();
+                    if (q) {
+                        void this.plugin.performMetadataSearch(q);
+                        this.close();
+                    } else {
+                        new Notice("Enter a search term.");
+                    }
+                });
+            });
 
-        this.searchInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") metaSearchBtn.click();
-        });
-
-        const warning = container.createEl("div", { text: "(Note: Vault-wide structure searches may take a moment to process.)", cls: "color-text-muted" });
-        warning.style.fontSize = "0.8em";
-        warning.style.marginTop = "15px";
-
-        window.setTimeout(() => this.searchInput.focus(), 50);
+        contentEl.createEl("div", { text: "(Note: Vault-wide structure searches may take a moment to process.)", cls: "setting-item-description" });
     }
     onClose() { this.contentEl.empty(); }
 }
@@ -457,13 +450,15 @@ class MetadataSearchResultsModal extends Modal {
 
         const list = contentEl.createEl("ul");
         for (const file of this.results) {
-            const li = list.createEl("li");
-            li.style.cursor = "pointer";
-            li.style.padding = "5px";
-            li.style.color = "var(--text-accent)";
-            li.createSpan({ text: file.basename });
-            li.onclick = () => {
-                void this.app.workspace.getLeaf(false).openFile(file);
+            const li = list.createEl("li", { cls: "tree-item" });
+            const inner = li.createEl("div", { cls: "tree-item-self is-clickable" });
+            inner.createSpan({ text: file.basename, cls: "tree-item-inner" });
+            
+            inner.onclick = () => {
+                const leaf = this.app.workspace.getLeaf();
+                if (leaf) {
+                    void leaf.openFile(file);
+                }
                 this.close();
             };
         }
@@ -501,8 +496,9 @@ class InventoryModal extends Modal {
         
         for (const file of files) {
             const cache = this.app.metadataCache.getFileCache(file);
-            if (cache && cache.frontmatter) {
-                const val: unknown = cache.frontmatter[key];
+            const fm = cache?.frontmatter as Record<string, unknown> | undefined;
+            if (fm && key in fm) {
+                const val = fm[key];
                 if (typeof val === 'string' && val.trim() !== '') {
                     values.add(val.trim());
                 }
@@ -514,11 +510,7 @@ class InventoryModal extends Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.createEl("h3", { text: "Add a Container to Inventory" });
-        this.modalEl.style.width = "70vw";
-
-        const subtitle = contentEl.createEl("p", { text: "Physical inventory details (CAS, Supplier, Location) must be entered manually.", cls: "color-text-muted" });
-        subtitle.style.fontSize = "0.9em";
-        subtitle.style.marginBottom = "15px";
+        contentEl.createEl("p", { text: "Physical inventory details (CAS, Supplier, Location) must be entered manually.", cls: "setting-item-description" });
 
         const locations = this.getUniqueFrontmatterValues('location');
         const locationDatalist = contentEl.createEl('datalist');
@@ -530,66 +522,36 @@ class InventoryModal extends Modal {
         supplierDatalist.id = 'inventory-suppliers';
         suppliers.forEach(sup => supplierDatalist.createEl('option', { value: sup }));
 
-        const grid = contentEl.createDiv();
-        grid.style.display = "grid";
-        grid.style.gridTemplateColumns = "1fr 1fr";
-        grid.style.gap = "15px";
-        grid.style.marginBottom = "15px";
-
-        const createInput = (parent: HTMLElement, label: string, placeholder: string) => {
-            const div = parent.createDiv();
-            div.createEl("label", { text: label, cls: "color-text-muted" }).style.display = "block";
-            const input = div.createEl("input", { type: "text", placeholder });
-            input.style.width = "100%";
+        const createInput = (name: string, placeholder: string, datalistId?: string) => {
+            let input!: HTMLInputElement;
+            new Setting(contentEl).setName(name).addText(t => {
+                t.setPlaceholder(placeholder);
+                if (datalistId) t.inputEl.setAttribute('list', datalistId);
+                input = t.inputEl;
+            });
             return input;
         };
 
-        this.nameInput = createInput(grid, "Container Name (*)", "e.g., Toluene");
-        this.casInput = createInput(grid, "CAS Number", "e.g., 108-88-3");
-        this.sizeInput = createInput(grid, "Container Size", "e.g., 500 mL or 100 g");
-        this.barcodeInput = createInput(grid, "Barcode", "e.g., LAB-CHEM-001");
-        
-        this.locationInput = createInput(grid, "Location", "e.g., Fumehood Cupboard 2");
-        this.locationInput.setAttribute('list', 'inventory-locations');
-        
-        this.supplierInput = createInput(grid, "Supplier", "e.g., Sigma-Aldrich");
-        this.supplierInput.setAttribute('list', 'inventory-suppliers');
-        
-        this.expiryInput = createInput(grid, "Expiry Date", "e.g., 2028-06-14");
-        this.productCodeInput = createInput(grid, "Product Code", "e.g., 244511");
-        
-        this.smilesInput = createInput(grid, "SMILES (For Structure Search)", "e.g., CC1=CC=CC=C1");
-        this.smilesInput.parentElement!.style.gridColumn = "span 2";
+        this.nameInput = createInput("Container Name (*)", "e.g., Toluene");
+        this.casInput = createInput("CAS Number", "e.g., 108-88-3");
+        this.sizeInput = createInput("Container Size", "e.g., 500 mL or 100 g");
+        this.barcodeInput = createInput("Barcode", "e.g., LAB-CHEM-001");
+        this.locationInput = createInput("Location", "e.g., Fumehood", 'inventory-locations');
+        this.supplierInput = createInput("Supplier", "e.g., Sigma", 'inventory-suppliers');
+        this.expiryInput = createInput("Expiry Date", "e.g., 2028-06-14");
+        this.productCodeInput = createInput("Product Code", "e.g., 244511");
+        this.smilesInput = createInput("SMILES (For Structure Search)", "e.g., CC1=CC=CC=C1");
 
-        const actionGrid = contentEl.createDiv();
-        actionGrid.style.display = "flex";
-        actionGrid.style.gap = "10px";
-        actionGrid.style.marginTop = "10px";
-        actionGrid.style.marginBottom = "10px";
+        new Setting(contentEl)
+            .addButton(btn => btn.setButtonText("1. Fetch Safety & SMILES").onClick(() => { void this.fetchSafetyOnline(); }))
+            .addButton(btn => btn.setButtonText("2. Calc Formula & MW").onClick(() => this.calculateOffline()));
 
-        const fetchOnlineBtn = actionGrid.createEl("button", { text: "1. Fetch Safety & SMILES (Online)" });
-        fetchOnlineBtn.onclick = () => { void this.fetchSafetyOnline(); };
+        this.mwFormulaText = contentEl.createDiv({ cls: "setting-item-description" });
+        this.safetyInfoText = contentEl.createDiv({ cls: "setting-item-description" });
 
-        const calcOfflineBtn = actionGrid.createEl("button", { text: "2. Calc Formula & MW from SMILES (Offline)" });
-        calcOfflineBtn.onclick = () => this.calculateOffline();
-
-        this.mwFormulaText = contentEl.createDiv();
-        this.mwFormulaText.style.padding = "5px";
-        
-        this.safetyInfoText = contentEl.createDiv();
-        this.safetyInfoText.style.padding = "5px";
-
-        const btnContainer = contentEl.createDiv();
-        btnContainer.style.display = "flex";
-        btnContainer.style.justifyContent = "flex-end";
-        btnContainer.style.gap = "10px";
-        btnContainer.style.marginTop = "20px";
-
-        const saveBtn = btnContainer.createEl("button", { text: "Save Container", cls: "mod-cta" });
-        saveBtn.onclick = () => { void this.saveToInventory(); };
-
-        const closeBtn = btnContainer.createEl("button", { text: "Cancel" });
-        closeBtn.onclick = () => this.close();
+        new Setting(contentEl)
+            .addButton(btn => btn.setButtonText("Cancel").onClick(() => this.close()))
+            .addButton(btn => btn.setButtonText("Save Container").setCta().onClick(() => { void this.saveToInventory(); }));
     }
 
     async fetchSafetyOnline() {
@@ -606,8 +568,10 @@ class InventoryModal extends Modal {
             if (pubchemRes.status === 200) {
                 interface PubChemProps { CanonicalSMILES?: string; CID?: number; }
                 interface PubChemResponse { PropertyTable?: { Properties?: PubChemProps[] } }
-                const data = pubchemRes.json as PubChemResponse;
+                
+                const data = pubchemRes.json as unknown as PubChemResponse;
                 const props = data?.PropertyTable?.Properties?.[0];
+                
                 if (props?.CanonicalSMILES) this.smilesInput.value = props.CanonicalSMILES;
                 if (props?.CID) this.pubchemCid = props.CID.toString();
             }
@@ -629,7 +593,6 @@ class InventoryModal extends Modal {
         if (this.pubchemCid || this.smilesInput.value) {
             this.safetyInfoText.empty();
             const sSpan = this.safetyInfoText.createSpan();
-            sSpan.style.color = "var(--text-success)";
             sSpan.createEl("b", { text: "Fetched successfully! " });
             if (this.pubchemCid) {
                 sSpan.createSpan({ text: `Found PubChem CID ${this.pubchemCid}. Risk assessment will be linked.` });
@@ -652,7 +615,6 @@ class InventoryModal extends Modal {
             
             this.mwFormulaText.empty();
             const mwSpan = this.mwFormulaText.createSpan();
-            mwSpan.style.color = "var(--text-success)";
             mwSpan.createEl("b", { text: "Calculated Offline: " });
             mwSpan.createSpan({ text: `MW ${this.calculatedMW} g/mol | Formula ${this.calculatedFormula}` });
         } else {
@@ -737,17 +699,10 @@ class SearchResultsModal extends Modal {
     async onOpen() {
         const { contentEl } = this;
         contentEl.empty();
-        this.modalEl.style.width = "80vw";
-        this.modalEl.style.height = "80vh";
 
         contentEl.createEl("h2", { text: `Found ${this.results.length} files matching substructure` });
 
         const queryContainer = contentEl.createDiv();
-        queryContainer.style.marginBottom = "20px";
-        queryContainer.style.padding = "10px";
-        queryContainer.style.background = "var(--background-secondary)";
-        queryContainer.style.borderRadius = "8px";
-        
         queryContainer.empty();
         queryContainer.createEl('strong', { text: 'Query Fragment:' });
         queryContainer.createEl('br');
@@ -760,11 +715,6 @@ class SearchResultsModal extends Modal {
         }
 
         const resultsContainer = contentEl.createDiv();
-        resultsContainer.style.overflowY = "auto";
-        resultsContainer.style.maxHeight = "calc(100% - 150px)";
-        resultsContainer.style.display = "grid";
-        resultsContainer.style.gridTemplateColumns = "repeat(auto-fill, minmax(250px, 1fr))";
-        resultsContainer.style.gap = "15px";
 
         if (this.results.length === 0) {
             resultsContainer.createEl("p", { text: "No matching structures found in your vault." });
@@ -772,33 +722,23 @@ class SearchResultsModal extends Modal {
         }
 
         for (const result of this.results) {
-            const card = resultsContainer.createDiv();
-            card.style.border = "1px solid var(--background-modifier-border)";
-            card.style.borderRadius = "8px";
-            card.style.padding = "10px";
-            card.style.background = "var(--background-primary)";
-            card.style.cursor = "pointer";
-
-            card.addEventListener('mouseenter', () => card.style.background = "var(--background-secondary-alt)");
-            card.addEventListener('mouseleave', () => card.style.background = "var(--background-primary)");
-
-            card.addEventListener("click", () => {
-                void this.app.workspace.getLeaf(false).openFile(result.file);
+            const targetSmiles = result.matchedSmiles[0] || "";
+            const s = new Setting(resultsContainer)
+                .setName(result.file.basename)
+                .setDesc(targetSmiles);
+            
+            s.settingEl.classList.add("is-clickable");
+            s.settingEl.addEventListener("click", () => {
+                const leaf = this.app.workspace.getLeaf();
+                if (leaf) {
+                    void leaf.openFile(result.file);
+                }
                 this.close();
             });
 
-            const h4 = card.createEl("h4", { text: result.file.basename, cls: "color-text-normal" });
-            h4.style.margin = "0 0 10px 0";
-            
-            const targetSmiles = result.matchedSmiles[0];
-            if (!targetSmiles) continue;
-
-            if (this.chemEdit && this.chemEdit.api) {
-                const resultPreview = await this.chemEdit.api.renderStructure(targetSmiles, 200, 200);
-                if (resultPreview) card.appendChild(resultPreview);
-            } else {
-                const textDiv = card.createDiv({ text: targetSmiles, cls: "color-text-muted" });
-                textDiv.style.wordBreak = "break-all";
+            if (this.chemEdit && this.chemEdit.api && targetSmiles) {
+                const resultPreview = await this.chemEdit.api.renderStructure(targetSmiles, 80, 80);
+                if (resultPreview) s.controlEl.appendChild(resultPreview);
             }
         }
     }
@@ -817,92 +757,72 @@ class ElectrolysisModal extends Modal {
         const { contentEl } = this;
         contentEl.createEl("h3", { text: "Electrolysis & Faradaic Efficiency" });
 
-        const grid = contentEl.createDiv();
-        grid.style.display = "grid";
-        grid.style.gridTemplateColumns = "1fr 1fr";
-        grid.style.gap = "10px";
-        grid.style.marginBottom = "15px";
+        let inputMA!: HTMLInputElement, inputH!: HTMLInputElement, inputN!: HTMLInputElement, inputYield!: HTMLInputElement;
 
-        const createInput = (parent: HTMLElement, label: string, placeholder: string) => {
-            const div = parent.createDiv();
-            div.createEl("label", { text: label }).style.display = "block";
-            const input = div.createEl("input", { type: "number", placeholder });
-            input.style.width = "100%";
-            return input;
-        };
+        new Setting(contentEl).setName("Constant Current (mA)").addText(t => { t.setValue("2.5"); inputMA = t.inputEl; });
+        new Setting(contentEl).setName("Time (hours)").addText(t => { t.setValue("4.0"); inputH = t.inputEl; });
+        new Setting(contentEl).setName("Electrons transferred (n)").addText(t => { t.setValue("2"); inputN = t.inputEl; });
+        new Setting(contentEl).setName("Actual Yield (mmol) [Optional]").addText(t => { t.setValue("0.15"); inputYield = t.inputEl; });
 
-        const inputMA = createInput(grid, "Constant Current (mA)", "2.5");
-        const inputH = createInput(grid, "Time (hours)", "4.0");
-        const inputN = createInput(grid, "Electrons transferred (n)", "2");
-        const inputYield = createInput(grid, "Actual Yield (mmol) [Optional]", "0.15");
-
-        const resultBox = contentEl.createDiv();
-        resultBox.style.padding = "10px";
-        resultBox.style.background = "var(--background-secondary)";
-        resultBox.style.borderRadius = "8px";
-        resultBox.style.marginBottom = "15px";
-        resultBox.style.display = "none";
-
-        const btnContainer = contentEl.createDiv();
-        btnContainer.style.display = "flex";
-        btnContainer.style.justifyContent = "flex-end";
-        btnContainer.style.gap = "10px";
-
-        const calcBtn = btnContainer.createEl("button", { text: "Calculate", cls: "mod-cta" });
-        const insertBtn = btnContainer.createEl("button", { text: "Insert into Note" });
-        insertBtn.style.display = "none";
-
+        const resultBox = contentEl.createDiv({ cls: "setting-item-description" });
         let finalMarkdown = "";
 
-        calcBtn.onclick = () => {
-            const i_mA = parseFloat(inputMA.value) || 0;
-            const t_h = parseFloat(inputH.value) || 0;
-            const n = parseFloat(inputN.value) || 1;
-            const yield_mmol = parseFloat(inputYield.value) || 0;
+        let insertBtnCtrl: HTMLButtonElement;
 
-            const i_A = i_mA / 1000;
-            const t_s = t_h * 3600;
-            const q = i_A * t_s;
-            const mol_e = q / 96485;
-            const mmol_e = mol_e * 1000;
-            const theoretical_mmol = mmol_e / n;
+        new Setting(contentEl)
+            .addButton(btn => {
+                btn.setButtonText("Insert into Note");
+                insertBtnCtrl = btn.buttonEl;
+                insertBtnCtrl.addClass("is-hidden"); // Uses Obsidian's native hidden class
+                btn.onClick(() => {
+                    if (this.editor) {
+                        const cursor = this.editor.getCursor();
+                        this.editor.replaceRange(finalMarkdown, cursor);
+                        new Notice("Electrolysis data inserted!");
+                        this.close();
+                    }
+                });
+            })
+            .addButton(btn => {
+                btn.setButtonText("Calculate");
+                btn.setCta();
+                btn.onClick(() => {
+                    const i_mA = parseFloat(inputMA.value) || 0;
+                    const t_h = parseFloat(inputH.value) || 0;
+                    const n = parseFloat(inputN.value) || 1;
+                    const yield_mmol = parseFloat(inputYield.value) || 0;
 
-            resultBox.empty();
-            resultBox.createEl('b', { text: 'Charge Passed (Q): ' });
-            resultBox.createSpan({ text: `${q.toFixed(2)} C` });
-            resultBox.createEl('br');
-            resultBox.createEl('b', { text: 'Electrons (e-): ' });
-            resultBox.createSpan({ text: `${mmol_e.toFixed(3)} mmol` });
-            resultBox.createEl('br');
-            resultBox.createEl('b', { text: 'Theoretical Yield: ' });
-            resultBox.createSpan({ text: `${theoretical_mmol.toFixed(3)} mmol` });
+                    const i_A = i_mA / 1000;
+                    const t_s = t_h * 3600;
+                    const q = i_A * t_s;
+                    const mol_e = q / 96485;
+                    const mmol_e = mol_e * 1000;
+                    const theoretical_mmol = mmol_e / n;
 
-            finalMarkdown = `**Electrolysis Parameters:**\n* Constant Current: ${i_mA} mA\n* Time: ${t_h} h\n* Charge Passed ($Q$): ${q.toFixed(2)} C (${mmol_e.toFixed(3)} mmol $e^-$)\n* Theoretical Yield ($n=${n}$): ${theoretical_mmol.toFixed(3)} mmol\n`;
+                    resultBox.empty();
+                    resultBox.createEl('b', { text: 'Charge Passed (Q): ' });
+                    resultBox.createSpan({ text: `${q.toFixed(2)} C` });
+                    resultBox.createEl('br');
+                    resultBox.createEl('b', { text: 'Electrons (e-): ' });
+                    resultBox.createSpan({ text: `${mmol_e.toFixed(3)} mmol` });
+                    resultBox.createEl('br');
+                    resultBox.createEl('b', { text: 'Theoretical Yield: ' });
+                    resultBox.createSpan({ text: `${theoretical_mmol.toFixed(3)} mmol` });
 
-            if (yield_mmol > 0) {
-                const fe = (yield_mmol / theoretical_mmol) * 100;
-                resultBox.createEl('br');
-                resultBox.createEl('br');
-                resultBox.createEl('b', { text: 'Faradaic Efficiency: ' });
-                const feSpan = resultBox.createSpan({ text: `${fe.toFixed(1)}%` });
-                feSpan.style.color = "var(--text-success)";
-                feSpan.style.fontWeight = "bold";
-                finalMarkdown += `* Faradaic Efficiency (FE): ${fe.toFixed(1)}%\n`;
-            }
+                    finalMarkdown = `**Electrolysis Parameters:**\n* Constant Current: ${i_mA} mA\n* Time: ${t_h} h\n* Charge Passed ($Q$): ${q.toFixed(2)} C (${mmol_e.toFixed(3)} mmol $e^-$)\n* Theoretical Yield ($n=${n}$): ${theoretical_mmol.toFixed(3)} mmol\n`;
 
-            resultBox.style.display = "block";
-            
-            if (this.editor) insertBtn.style.display = "block";
-        };
-
-        insertBtn.onclick = () => {
-            if (this.editor) {
-                const cursor = this.editor.getCursor();
-                this.editor.replaceRange(finalMarkdown, cursor);
-                new Notice("Electrolysis data inserted!");
-                this.close();
-            }
-        };
+                    if (yield_mmol > 0) {
+                        const fe = (yield_mmol / theoretical_mmol) * 100;
+                        resultBox.createEl('br');
+                        resultBox.createEl('br');
+                        resultBox.createEl('b', { text: 'Faradaic Efficiency: ' });
+                        resultBox.createSpan({ text: `${fe.toFixed(1)}%` });
+                        finalMarkdown += `* Faradaic Efficiency (FE): ${fe.toFixed(1)}%\n`;
+                    }
+                    
+                    if (this.editor) insertBtnCtrl.removeClass("is-hidden");
+                });
+            });
     }
     onClose() { this.contentEl.empty(); }
 }
@@ -921,33 +841,26 @@ class BoilerplateModal extends Modal {
         const { contentEl } = this;
         contentEl.createEl("h3", { text: "Experimental Section Boilerplate" });
 
-        const infoBox = contentEl.createDiv();
-        infoBox.style.padding = "15px";
-        infoBox.style.background = "var(--background-secondary)";
-        infoBox.style.borderRadius = "8px";
-        infoBox.style.marginBottom = "15px";
-        
-        const textArea = infoBox.createEl("textarea");
-        textArea.style.width = "100%";
-        textArea.style.height = "250px";
-        textArea.style.fontFamily = "monospace";
-        textArea.value = this.boilerplate;
+        let textAreaVal = this.boilerplate;
+        new Setting(contentEl).addTextArea(t => {
+            t.setValue(this.boilerplate);
+            t.onChange(v => textAreaVal = v);
+            t.inputEl.rows = 15;
+            t.inputEl.cols = 50;
+        });
 
-        const btnContainer = contentEl.createDiv();
-        btnContainer.style.display = "flex";
-        btnContainer.style.justifyContent = "flex-end";
-        btnContainer.style.gap = "10px";
-
-        const pasteBtn = btnContainer.createEl("button", { text: "Insert into Note", cls: "mod-cta" });
-        pasteBtn.onclick = () => {
-            const cursor = this.editor.getCursor();
-            this.editor.replaceRange(textArea.value, cursor);
-            new Notice("Boilerplate inserted!");
-            this.close();
-        };
-
-        const closeBtn = btnContainer.createEl("button", { text: "Cancel" });
-        closeBtn.onclick = () => this.close();
+        new Setting(contentEl)
+            .addButton(btn => btn.setButtonText("Cancel").onClick(() => this.close()))
+            .addButton(btn => {
+                btn.setButtonText("Insert into Note");
+                btn.setCta();
+                btn.onClick(() => {
+                    const cursor = this.editor.getCursor();
+                    this.editor.replaceRange(textAreaVal, cursor);
+                    new Notice("Boilerplate inserted!");
+                    this.close();
+                });
+            });
     }
     onClose() { this.contentEl.empty(); }
 }
@@ -967,10 +880,7 @@ class FormattedNoticeModal extends Modal {
     }
     onOpen() {
         this.contentEl.createEl("h3", { text: this.titleText });
-        const div = this.contentEl.createDiv();
-        div.style.padding = "15px";
-        div.style.background = "var(--background-secondary)";
-        div.style.borderRadius = "8px";
+        const div = this.contentEl.createDiv({ cls: "setting-item-description" });
         
         div.createEl('b', { text: 'Formula: ' });
         div.createSpan({ text: this.formula });
@@ -979,9 +889,7 @@ class FormattedNoticeModal extends Modal {
         div.createSpan({ text: `${this.mw} g/mol` });
         div.createEl('br');
         div.createEl('b', { text: 'Exact Mass (MS): ' });
-        const exactSpan = div.createSpan({ text: this.exact });
-        exactSpan.style.color = "var(--text-success)";
-        exactSpan.style.fontWeight = "bold";
+        div.createSpan({ text: this.exact });
     }
     onClose() { this.contentEl.empty(); }
 }
@@ -1004,11 +912,7 @@ class EaResultsModal extends Modal {
         const { contentEl } = this;
         contentEl.createEl("h3", { text: "Elemental Analysis (Combustion)" });
 
-        const infoBox = contentEl.createDiv();
-        infoBox.style.padding = "15px";
-        infoBox.style.background = "var(--background-secondary)";
-        infoBox.style.borderRadius = "8px";
-        infoBox.style.marginBottom = "15px";
+        const infoBox = contentEl.createDiv({ cls: "setting-item-description" });
         
         infoBox.createEl('b', { text: 'Formula: ' });
         infoBox.createSpan({ text: this.formula });
@@ -1020,32 +924,25 @@ class EaResultsModal extends Modal {
         infoBox.createEl('b', { text: 'Formatted String:' });
         infoBox.createEl('br');
         
-        const codeBlock = infoBox.createEl('code', { text: this.eaString });
-        codeBlock.style.display = "block";
-        codeBlock.style.padding = "8px";
-        codeBlock.style.marginTop = "5px";
-        codeBlock.style.background = "var(--background-primary)";
-        codeBlock.style.userSelect = "all";
+        infoBox.createEl('code', { text: this.eaString });
 
-        const btnContainer = contentEl.createDiv();
-        btnContainer.style.display = "flex";
-        btnContainer.style.justifyContent = "flex-end";
-        btnContainer.style.gap = "10px";
+        const s = new Setting(contentEl);
+        s.addButton(btn => btn.setButtonText("Close").onClick(() => this.close()));
 
         if (this.editor) {
-            const pasteBtn = btnContainer.createEl("button", { text: "Insert into Note", cls: "mod-cta" });
-            pasteBtn.onclick = () => {
-                if (this.editor) {
-                    const cursor = this.editor.getCursor();
-                    this.editor.replaceRange(`${this.eaString}\n`, cursor);
-                    new Notice("Elemental Analysis inserted!");
-                }
-                this.close();
-            };
+            s.addButton(btn => {
+                btn.setButtonText("Insert into Note");
+                btn.setCta();
+                btn.onClick(() => {
+                    if (this.editor) {
+                        const cursor = this.editor.getCursor();
+                        this.editor.replaceRange(`${this.eaString}\n`, cursor);
+                        new Notice("Elemental Analysis inserted!");
+                    }
+                    this.close();
+                });
+            });
         }
-
-        const closeBtn = btnContainer.createEl("button", { text: "Close" });
-        closeBtn.onclick = () => this.close();
     }
     onClose() { this.contentEl.empty(); }
 }
@@ -1057,23 +954,23 @@ class ExternalDatabaseModal extends Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.createEl("h3", { text: "Search External Databases" });
-        contentEl.createEl("p", { text: "Enter a chemical name, CAS, or SMILES:", cls: "color-text-muted" });
-
-        const input = contentEl.createEl("input", { type: "text" });
-        input.style.width = "100%";
-        input.style.marginBottom = "20px";
-
-        const btnGrid = contentEl.createDiv();
-        btnGrid.style.display = "grid";
-        btnGrid.style.gridTemplateColumns = "1fr 1fr";
-        btnGrid.style.gap = "10px";
+        
+        let inputVal = "";
+        new Setting(contentEl)
+            .setName("Chemical name, CAS, or SMILES:")
+            .addText(t => {
+                t.onChange(v => inputVal = v);
+                window.setTimeout(() => t.inputEl.focus(), 50);
+            });
 
         const createNavBtn = (text: string, urlGenerator: (val: string) => string) => {
-            const btn = btnGrid.createEl("button", { text: text });
-            btn.onclick = () => {
-                const val = input.value.trim();
-                if (val) window.open(urlGenerator(val), '_blank');
-            };
+            new Setting(contentEl).setName(text).addButton(btn => {
+                btn.setButtonText("Open");
+                btn.onClick(() => {
+                    const val = inputVal.trim();
+                    if (val) window.open(urlGenerator(val), '_blank');
+                });
+            });
         };
 
         createNavBtn("Google Scholar", (v) => `https://scholar.google.com/scholar?q=${encodeURIComponent(v)}`);
@@ -1081,13 +978,8 @@ class ExternalDatabaseModal extends Modal {
         createNavBtn("ChemSpider", (v) => `https://www.chemspider.com/Search.aspx?q=${encodeURIComponent(v)}`);
         createNavBtn("NIST WebBook", (v) => `https://webbook.nist.gov/cgi/cbook.cgi?Name=${encodeURIComponent(v)}&Units=SI`);
 
-        const reaxysBtn = btnGrid.createEl("button", { text: "Open Reaxys Portal" });
-        reaxysBtn.onclick = () => window.open('https://www.reaxys.com/', '_blank');
-
-        const sdbsBtn = btnGrid.createEl("button", { text: "Open SDBS Portal" });
-        sdbsBtn.onclick = () => window.open('https://sdbs.db.aist.go.jp/sdbs/cgi-bin/cre_index.cgi', '_blank');
-
-        window.setTimeout(() => input.focus(), 50);
+        new Setting(contentEl).setName("Reaxys Portal").addButton(btn => btn.setButtonText("Open").onClick(() => window.open('https://www.reaxys.com/', '_blank')));
+        new Setting(contentEl).setName("SDBS Portal").addButton(btn => btn.setButtonText("Open").onClick(() => window.open('https://sdbs.db.aist.go.jp/sdbs/cgi-bin/cre_index.cgi', '_blank')));
     }
     onClose() { this.contentEl.empty(); }
 }
@@ -1104,30 +996,33 @@ class TextInputModal extends Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.createEl("h3", { text: this.titleText });
-        const input = contentEl.createEl("input", { type: "text" });
-        input.style.width = "100%";
-        input.style.marginBottom = "15px";
+        
+        let val = "";
+        let submitBtnCtrl: HTMLButtonElement | undefined;
 
-        input.addEventListener("keypress", (e) => {
-            if (e.key === "Enter" && input.value) {
-                this.onSubmit(input.value.trim());
-                this.close();
-            }
+        new Setting(contentEl).addText(t => {
+            t.onChange(v => val = v);
+            t.inputEl.addEventListener("keypress", (e) => {
+                if (e.key === "Enter" && submitBtnCtrl) submitBtnCtrl.click();
+            });
+            window.setTimeout(() => t.inputEl.focus(), 50);
         });
 
-        const btn = contentEl.createEl("button", { text: "Submit", cls: "mod-cta" });
-        btn.onclick = () => {
-            if (input.value) {
-                this.onSubmit(input.value.trim());
-                this.close();
-            }
-        };
-        window.setTimeout(() => input.focus(), 50);
+        new Setting(contentEl).addButton(btn => {
+            btn.setButtonText("Submit");
+            btn.setCta();
+            submitBtnCtrl = btn.buttonEl;
+            btn.onClick(() => {
+                if (val) {
+                    this.onSubmit(val.trim());
+                    this.close();
+                }
+            });
+        });
     }
     onClose() { this.contentEl.empty(); }
 }
 
-// eslint-disable-next-line obsidianmd/no-missing-setting-definitions
 class ChemSearchSettingTab extends PluginSettingTab {
     plugin: ChemSearchPlugin;
 
@@ -1136,11 +1031,13 @@ class ChemSearchSettingTab extends PluginSettingTab {
         this.plugin = plugin;
     }
 
+    getSettingDefinitions() {
+        return [];
+    }
+
     display(): void {
         const {containerEl} = this;
         containerEl.empty();
-        
-        new Setting(containerEl).setName('General').setHeading();
 
         new Setting(containerEl)
             .setName('Inventory Folder Path')
