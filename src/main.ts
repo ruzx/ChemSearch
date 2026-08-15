@@ -1,5 +1,3 @@
-/* eslint-disable */
-
 import { App, Modal, Notice, Plugin, TFile, PluginSettingTab, Setting, Editor, requestUrl, addIcon } from 'obsidian';
 import * as OCL from 'openchemlib';
 
@@ -31,6 +29,21 @@ const AVERAGE_MASSES: Record<string, number> = {
     C: 12.011, H: 1.008, N: 14.007, O: 15.999,
     F: 18.998, Cl: 35.45, Br: 79.904, I: 126.90,
     S: 32.06, P: 30.974, B: 10.81, Si: 28.085
+};
+
+interface ChemEditAPI {
+    openEditor(initial: string, type: string, cb: (result: string) => Promise<void>): void;
+    renderStructure(query: string, w: number, h: number): Promise<HTMLElement | null>;
+}
+
+interface ChemEditPluginInstance {
+    api: ChemEditAPI;
+}
+
+type ObsidianAppWithPlugins = App & {
+    plugins: {
+        plugins: Record<string, ChemEditPluginInstance>;
+    };
 };
 
 export default class ChemSearchPlugin extends Plugin {
@@ -153,11 +166,7 @@ export default class ChemSearchPlugin extends Plugin {
             return;
         }
         const exact = props.exactMass.toFixed(this.settings.msDecimals);
-        new FormattedNoticeModal(this.app, "Offline MS Calculation", `
-            <b>Formula:</b> ${props.formula}<br>
-            <b>Molecular Weight:</b> ${props.mw.toFixed(3)} g/mol<br>
-            <b>Exact Mass (MS):</b> <span style="color:var(--text-success); font-weight:bold;">${exact}</span>
-        `).open();
+        new FormattedNoticeModal(this.app, "Offline MS Calculation", props.formula, props.mw.toFixed(3), exact).open();
     }
 
     calculateEAOffline(smiles: string, editor?: Editor) {
@@ -216,29 +225,27 @@ export default class ChemSearchPlugin extends Plugin {
         new BoilerplateModal(this.app, boilerplate, editor).open();
     }
 
-    getChemEdit() {
-        // @ts-ignore
-        const plugins = this.app.plugins.plugins;
+    getChemEdit(): ChemEditPluginInstance | null {
+        const obsidianApp = this.app as ObsidianAppWithPlugins;
+        const plugins = obsidianApp.plugins.plugins;
         
-        // 1. Prioritize ChemEdit Universal (Mobile & Desktop compatible)
         if (plugins['chemedit-universal'] && plugins['chemedit-universal'].api) return plugins['chemedit-universal'];
         if (plugins['obsidian-chemedit-universal'] && plugins['obsidian-chemedit-universal'].api) return plugins['obsidian-chemedit-universal'];
         
-        // 2. Fall back to Original ChemEdit (Desktop specific)
         if (plugins['chemedit'] && plugins['chemedit'].api) return plugins['chemedit'];
         if (plugins['obsidian-chemedit'] && plugins['obsidian-chemedit'].api) return plugins['obsidian-chemedit'];
         
-        // 3. Catch-all for any plugin exposing the chem editor API
         for (const key in plugins) {
-            if (plugins[key] && plugins[key].api && plugins[key].api.openEditor) {
-                return plugins[key];
+            const plug = plugins[key];
+            if (plug && plug.api && typeof plug.api.openEditor === 'function') {
+                return plug;
             }
         }
         
         return null;
     }
 
-    async executeStructureSearchSafe(querySmiles: string, chemEdit: any) {
+    async executeStructureSearchSafe(querySmiles: string, chemEdit: ChemEditPluginInstance) {
         if (!querySmiles || this.isSearching) return;
         this.isSearching = true;
         try {
@@ -255,7 +262,7 @@ export default class ChemSearchPlugin extends Plugin {
         const chemEdit = this.getChemEdit();
         if (!chemEdit) {
             new TextInputModal(this.app, "A Structure Drawing plugin (ChemEdit or ChemEdit Universal) was not found. Enter SMILES query manually:", async (smiles) => {
-                await this.executeStructureSearchSafe(smiles, chemEdit);
+                await this.executeStructureSearchSafe(smiles, null as unknown as ChemEditPluginInstance);
             }).open();
             return;
         }
@@ -265,7 +272,7 @@ export default class ChemSearchPlugin extends Plugin {
         });
     }
 
-    async performSubstructureSearch(querySmiles: string, chemEdit: any) {
+    async performSubstructureSearch(querySmiles: string, chemEdit: ChemEditPluginInstance) {
         const matchingFiles: { file: TFile, matchedSmiles: string[] }[] = [];
         try {
             const queryMol = OCL.Molecule.fromSmiles(querySmiles);
@@ -284,7 +291,9 @@ export default class ChemSearchPlugin extends Plugin {
                         const targetMol = OCL.Molecule.fromSmiles(smiles);
                         searcher.setMolecule(targetMol);
                         if (searcher.isFragmentInMolecule()) fileMatches.push(smiles);
-                    } catch (e) { continue; }
+                    } catch (e) {
+                        continue;
+                    }
                 }
                 if (fileMatches.length > 0) matchingFiles.push({ file, matchedSmiles: fileMatches });
             }
@@ -599,10 +608,13 @@ class InventoryModal extends Modal {
         }
 
         if (this.pubchemCid || this.smilesInput.value) {
-            let msg = `<span style="color:var(--text-success)"><b>Fetched successfully!</b>`;
-            if (this.pubchemCid) msg += ` Found PubChem CID ${this.pubchemCid}. Risk assessment will be linked.`;
-            msg += `</span>`;
-            this.safetyInfoText.innerHTML = msg;
+            this.safetyInfoText.empty();
+            const sSpan = this.safetyInfoText.createSpan();
+            sSpan.style.color = "var(--text-success)";
+            sSpan.createEl("b", { text: "Fetched successfully! " });
+            if (this.pubchemCid) {
+                sSpan.createSpan({ text: `Found PubChem CID ${this.pubchemCid}. Risk assessment will be linked.` });
+            }
             new Notice("Data fetched successfully!");
         }
     }
@@ -618,7 +630,12 @@ class InventoryModal extends Modal {
         if (props) {
             this.calculatedFormula = props.formula;
             this.calculatedMW = props.mw.toFixed(2);
-            this.mwFormulaText.innerHTML = `<span style="color:var(--text-success)"><b>Calculated Offline:</b> MW ${this.calculatedMW} g/mol | Formula ${this.calculatedFormula}</span>`;
+            
+            this.mwFormulaText.empty();
+            const mwSpan = this.mwFormulaText.createSpan();
+            mwSpan.style.color = "var(--text-success)";
+            mwSpan.createEl("b", { text: "Calculated Offline: " });
+            mwSpan.createSpan({ text: `MW ${this.calculatedMW} g/mol | Formula ${this.calculatedFormula}` });
         } else {
             new Notice("Invalid SMILES. Could not calculate properties.");
         }
@@ -689,9 +706,9 @@ class InventoryModal extends Modal {
 class SearchResultsModal extends Modal {
     querySmiles: string;
     results: { file: TFile, matchedSmiles: string[] }[];
-    chemEdit: any;
+    chemEdit: ChemEditPluginInstance | null;
 
-    constructor(app: App, querySmiles: string, results: { file: TFile, matchedSmiles: string[] }[], chemEdit: any) {
+    constructor(app: App, querySmiles: string, results: { file: TFile, matchedSmiles: string[] }[], chemEdit: ChemEditPluginInstance | null) {
         super(app);
         this.querySmiles = querySmiles;
         this.results = results;
@@ -711,7 +728,10 @@ class SearchResultsModal extends Modal {
         queryContainer.style.padding = "10px";
         queryContainer.style.background = "var(--background-secondary)";
         queryContainer.style.borderRadius = "8px";
-        queryContainer.innerHTML = `<strong>Query Fragment:</strong><br>`;
+        
+        queryContainer.empty();
+        queryContainer.createEl('strong', { text: 'Query Fragment:' });
+        queryContainer.createEl('br');
 
         if (this.chemEdit && this.chemEdit.api) {
             const queryPreview = await this.chemEdit.api.renderStructure(this.querySmiles, 150, 150);
@@ -750,6 +770,7 @@ class SearchResultsModal extends Modal {
 
             card.createEl("h4", { text: result.file.basename, cls: "color-text-normal" }).style.margin = "0 0 10px 0";
             const targetSmiles = result.matchedSmiles[0];
+            if (!targetSmiles) continue;
 
             if (this.chemEdit && this.chemEdit.api) {
                 const resultPreview = await this.chemEdit.api.renderStructure(targetSmiles, 200, 200);
@@ -824,19 +845,29 @@ class ElectrolysisModal extends Modal {
             const mmol_e = mol_e * 1000;
             const theoretical_mmol = mmol_e / n;
 
-            let htmlResult = `<b>Charge Passed (Q):</b> ${q.toFixed(2)} C<br>`;
-            htmlResult += `<b>Electrons (e-):</b> ${mmol_e.toFixed(3)} mmol<br>`;
-            htmlResult += `<b>Theoretical Yield:</b> ${theoretical_mmol.toFixed(3)} mmol<br>`;
-            
+            resultBox.empty();
+            resultBox.createEl('b', { text: 'Charge Passed (Q): ' });
+            resultBox.createSpan({ text: `${q.toFixed(2)} C` });
+            resultBox.createEl('br');
+            resultBox.createEl('b', { text: 'Electrons (e-): ' });
+            resultBox.createSpan({ text: `${mmol_e.toFixed(3)} mmol` });
+            resultBox.createEl('br');
+            resultBox.createEl('b', { text: 'Theoretical Yield: ' });
+            resultBox.createSpan({ text: `${theoretical_mmol.toFixed(3)} mmol` });
+
             finalMarkdown = `**Electrolysis Parameters:**\n* Constant Current: ${i_mA} mA\n* Time: ${t_h} h\n* Charge Passed ($Q$): ${q.toFixed(2)} C (${mmol_e.toFixed(3)} mmol $e^-$)\n* Theoretical Yield ($n=${n}$): ${theoretical_mmol.toFixed(3)} mmol\n`;
 
             if (yield_mmol > 0) {
                 const fe = (yield_mmol / theoretical_mmol) * 100;
-                htmlResult += `<br><b>Faradaic Efficiency:</b> <span style="color:var(--text-success); font-weight:bold;">${fe.toFixed(1)}%</span>`;
+                resultBox.createEl('br');
+                resultBox.createEl('br');
+                resultBox.createEl('b', { text: 'Faradaic Efficiency: ' });
+                const feSpan = resultBox.createSpan({ text: `${fe.toFixed(1)}%` });
+                feSpan.style.color = "var(--text-success)";
+                feSpan.style.fontWeight = "bold";
                 finalMarkdown += `* Faradaic Efficiency (FE): ${fe.toFixed(1)}%\n`;
             }
 
-            resultBox.innerHTML = htmlResult;
             resultBox.style.display = "block";
             
             if (this.editor) insertBtn.style.display = "block";
@@ -901,12 +932,16 @@ class BoilerplateModal extends Modal {
 
 class FormattedNoticeModal extends Modal {
     titleText: string;
-    htmlContent: string;
+    formula: string;
+    mw: string;
+    exact: string;
 
-    constructor(app: App, titleText: string, htmlContent: string) {
+    constructor(app: App, titleText: string, formula: string, mw: string, exact: string) {
         super(app);
         this.titleText = titleText;
-        this.htmlContent = htmlContent;
+        this.formula = formula;
+        this.mw = mw;
+        this.exact = exact;
     }
     onOpen() {
         this.contentEl.createEl("h3", { text: this.titleText });
@@ -914,7 +949,17 @@ class FormattedNoticeModal extends Modal {
         div.style.padding = "15px";
         div.style.background = "var(--background-secondary)";
         div.style.borderRadius = "8px";
-        div.innerHTML = this.htmlContent;
+        
+        div.createEl('b', { text: 'Formula: ' });
+        div.createSpan({ text: this.formula });
+        div.createEl('br');
+        div.createEl('b', { text: 'Molecular Weight: ' });
+        div.createSpan({ text: `${this.mw} g/mol` });
+        div.createEl('br');
+        div.createEl('b', { text: 'Exact Mass (MS): ' });
+        const exactSpan = div.createSpan({ text: this.exact });
+        exactSpan.style.color = "var(--text-success)";
+        exactSpan.style.fontWeight = "bold";
     }
     onClose() { this.contentEl.empty(); }
 }
@@ -942,12 +987,23 @@ class EaResultsModal extends Modal {
         infoBox.style.background = "var(--background-secondary)";
         infoBox.style.borderRadius = "8px";
         infoBox.style.marginBottom = "15px";
-        infoBox.innerHTML = `
-            <b>Formula:</b> ${this.formula}<br>
-            <b>Molecular Weight:</b> ${this.mw.toFixed(3)} g/mol<br><br>
-            <b>Formatted String:</b><br>
-            <code style="display:block; padding:8px; margin-top:5px; background:var(--background-primary); user-select:all;">${this.eaString}</code>
-        `;
+        
+        infoBox.createEl('b', { text: 'Formula: ' });
+        infoBox.createSpan({ text: this.formula });
+        infoBox.createEl('br');
+        infoBox.createEl('b', { text: 'Molecular Weight: ' });
+        infoBox.createSpan({ text: `${this.mw.toFixed(3)} g/mol` });
+        infoBox.createEl('br');
+        infoBox.createEl('br');
+        infoBox.createEl('b', { text: 'Formatted String:' });
+        infoBox.createEl('br');
+        
+        const codeBlock = infoBox.createEl('code', { text: this.eaString });
+        codeBlock.style.display = "block";
+        codeBlock.style.padding = "8px";
+        codeBlock.style.marginTop = "5px";
+        codeBlock.style.background = "var(--background-primary)";
+        codeBlock.style.userSelect = "all";
 
         const btnContainer = contentEl.createDiv();
         btnContainer.style.display = "flex";
