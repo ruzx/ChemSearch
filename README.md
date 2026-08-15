@@ -2,6 +2,7 @@
 
 **Vault-wide chemical substructure search and inventory management for Obsidian.**
 Perform vault-wide substructure searches, track physical container stock.
+<img width="800" height="686" alt="Image" src="https://github.com/user-attachments/assets/37a95ef8-9456-4281-b3b4-e6996cffe532" />
 
 ---
 
