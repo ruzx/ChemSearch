@@ -35,8 +35,8 @@ Run essential calculations instantly without an internet connection using the bu
 ## 📋 Requirements
 
 To use the structural drawing features (Substructure Search), you must install one of the compatible chemical drawing plugins:
-- **[ChemEdit](https://github.com/Acylation/obsidian-chemedit)** (Desktop optimized)
-- **[ChemEdit Universal](https://github.com/Acylation/obsidian-chemedit-universal)** (Desktop & Mobile compatible)
+- **[ChemEdit](https://github.com/ruzx/obsidian-chemedit)** (Desktop optimized)
+- **[ChemEdit Universal](https://github.com/ruzx/ChemEdit-Universal)** (Desktop & Mobile compatible)
 
 *If a drawing plugin is not installed, ChemSearch will fall back to accepting manual SMILES string inputs.*
 
@@ -70,7 +70,7 @@ SORT expiry_date ASC
 
 **Manual Installation:**
 
-1. Download the latest `main.js`, `manifest.json`, and `styles.css` (if applicable) from the [Releases page](https://www.google.com/search?q=https://github.com/Acylation/ChemSearch/releases).
+1. Download the latest `main.js`, `manifest.json`, and `styles.css` (if applicable) from the [Releases page](https://www.google.com/search?q=https://github.com/ruzx/ChemSearch/releases).
 2. Create a folder named `chemsearch` inside your vault's `.obsidian/plugins/` directory.
 3. Place the downloaded files into that folder.
 4. Reload Obsidian and enable **ChemSearch** in your Community Plugins settings.
@@ -90,8 +90,8 @@ ChemSearch focuses on **substructure searching, inventory management, and offlin
 
 | Plugin | Description |
 | --- | --- |
-| [ChemEdit](https://github.com/Acylation/obsidian-chemedit) | Native chemical structure editor and viewer powered by Ketcher and SmilesDrawer. |
-| [ChemEdit Universal](https://github.com/Acylation/obsidian-chemedit-universal) | Cross-platform (Desktop & Mobile) chemical structure editor. |
+| [ChemEdit](https://github.com/ruzx/obsidian-chemedit) | Native chemical structure editor and viewer powered by Ketcher and SmilesDrawer. |
+| [ChemEdit Universal]([https://github.com/Acylation/obsidian-chemedit-universal](https://github.com/ruzx/ChemEdit-Universal)) | Cross-platform (Desktop & Mobile) chemical structure editor. |
 | [Chem](https://github.com/Acylation/obsidian-chem) | Render **SMILES** structures locally using SmilesDrawer and RDKit.js. |
 | [LaTeX Suite](https://github.com/artisticat1/obsidian-latex-suite) | Makes writing chemistry equations easier with LaTeX packages such as `mhchem` and `chemfig`. |
 | [TikZJax](https://github.com/artisticat1/obsidian-tikzjax) | Render TikZ diagrams directly inside Obsidian, including figures created with `chemfig`. |
