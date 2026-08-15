@@ -1,6 +1,6 @@
 {
     "name": "chem-search",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "description": "Chemical substructure search plugin.",
     "main": "main.js",
     "type": "module",

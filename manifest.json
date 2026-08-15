@@ -1,7 +1,7 @@
 {
     "id": "chem-search",
     "name": "ChemSearch",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "minAppVersion": "1.0.0",
     "description": "Chemical substructure search plugin.",
     "author": "Ruzal Sitdikov",
