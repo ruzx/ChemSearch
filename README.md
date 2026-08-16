@@ -91,7 +91,7 @@ ChemSearch focuses on **substructure searching, inventory management, and offlin
 | Plugin | Description |
 | --- | --- |
 | [ChemEdit](https://github.com/ruzx/obsidian-chemedit) | Native chemical structure editor and viewer powered by Ketcher and SmilesDrawer. |
-| [ChemEdit Universal]([https://github.com/Acylation/obsidian-chemedit-universal](https://github.com/ruzx/ChemEdit-Universal)) | Cross-platform (Desktop & Mobile) chemical structure editor. |
+| [ChemEdit Universal](https://github.com/ruzx/ChemEdit-Universal) | Cross-platform (Desktop & Mobile) chemical structure editor. |
 | [Chem](https://github.com/Acylation/obsidian-chem) | Render **SMILES** structures locally using SmilesDrawer and RDKit.js. |
 | [LaTeX Suite](https://github.com/artisticat1/obsidian-latex-suite) | Makes writing chemistry equations easier with LaTeX packages such as `mhchem` and `chemfig`. |
 | [TikZJax](https://github.com/artisticat1/obsidian-tikzjax) | Render TikZ diagrams directly inside Obsidian, including figures created with `chemfig`. |
